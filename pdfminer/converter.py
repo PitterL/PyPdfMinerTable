@@ -293,18 +293,18 @@ class HTMLConverter(PDFConverter):
         self.write(enc(text, None))
         return
 
-    def place_rect(self, color, borderwidth, x, y, w, h):
+    def place_rect(self, color, borderwidth, x, y, w, h, name=''):
         color = self.rect_colors.get(color)
         if color is not None:
-            self.write('<span style="position:absolute; border: %s %dpx solid; '
+            self.write('<span name="%s" style="position:absolute; border: %s %dpx solid; '
                        'left:%dpx; top:%dpx; width:%dpx; height:%dpx;"></span>\n' %
-                       (color, borderwidth,
+                       (name, color, borderwidth,
                         x*self.scale, (self._yoffset-y)*self.scale,
                         w*self.scale, h*self.scale))
         return
 
-    def place_border(self, color, borderwidth, item):
-        self.place_rect(color, borderwidth, item.x0, item.y1, item.width, item.height)
+    def place_border(self, color, borderwidth, item, name=''):
+        self.place_rect(color, borderwidth, item.x0, item.y1, item.width, item.height, name)
         return
 
     def place_image(self, item, borderwidth, x, y, w, h):
@@ -369,11 +369,12 @@ class HTMLConverter(PDFConverter):
         def render(item):
             if isinstance(item, LTPage):
                 self._yoffset += item.y1
-                self.place_border('page', 1, item)
                 if self.showpageno:
+                    name = 'page {}'.format(item.pageid)
+                    self.place_border('page', 1, item, name)
                     self.write('<div style="position:absolute; top:%dpx;">' %
-                               ((self._yoffset-item.y1)*self.scale))
-                    self.write('<a name="%s">Page %s</a></div>\n' % (item.pageid, item.pageid))
+                               ((self._yoffset - item.y1) * self.scale))
+                    self.write('<a name="Page" no="%s">Page %s</a></div>\n' % (item.pageid, item.pageid))
                 for child in item:
                     render(child)
                 if item.groups is not None:

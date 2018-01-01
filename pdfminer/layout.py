@@ -34,13 +34,15 @@ class IndexAssigner(object):
 class LAParams(object):
 
     def __init__(self,
-                 line_overlap=0.5,
-                 char_margin=2.0,
-                 line_margin=0.5,
+                 char_overlap=0.95,
+                 line_overlap=0.4,
+                 char_margin=1.4,
+                 line_margin=0.4,
                  word_margin=0.1,
-                 boxes_flow=0.5,
+                 boxes_flow=2,
                  detect_vertical=False,
                  all_texts=False):
+        self.char_overlap = char_overlap
         self.line_overlap = line_overlap
         self.char_margin = char_margin
         self.line_margin = line_margin
@@ -308,6 +310,43 @@ class LTContainer(LTComponent):
             self.add(obj)
         return
 
+    def sort_components(self, objs, laparams, is_vertical=None):
+        from functools import partial, cmp_to_key
+        def cmp_pos_func(obj, other, line_margin, is_vertical):
+            if is_vertical: # not verified the branch
+                fna = lambda t: (t.x0 + t.x1) / 2
+                fnb = lambda t: t.y0
+                fm = lambda t: t.width * line_margin
+            else:
+                fna = lambda t: (t.y0 + obj.y1) / 2 # first key: middle of y pos
+                fnb = lambda t: t.x0    # second key: x pos
+                fm = lambda t: t.height * line_margin   # margin for compared with first key
+
+            c1, c2 = map(fna,[obj, other])
+            m1, m2 = map(fm, [obj, other])
+            if c2 >= c1 - m1 and c2 <= c1 + m1 and\
+                            c1 >= c2 - m2 and c1 <= c2 + m2:
+                #if first key equal(mean in same line), then compare second key
+                return fnb(obj) - fnb(other)
+            elif c2 > c1:
+                return 1
+            else:
+                return -1
+
+        if not len(objs):
+            return
+
+        obj_class = type(objs[0])
+        if not issubclass(obj_class, LTComponent):
+            return
+
+        if is_vertical is None:
+            is_vertical = obj_class.__name__.lower().find("vertical") >= 0
+        key_func = cmp_to_key(partial(cmp_pos_func, line_margin=laparams.line_margin, is_vertical=is_vertical))
+
+        #print("Sort components: {} {}".format(obj_class.__name__, len(objs)))
+        objs.sort(key = key_func)
+
     def analyze(self, laparams):
         for obj in self._objs:
             obj.analyze(laparams)
@@ -439,7 +478,8 @@ class LTTextBoxHorizontal(LTTextBox):
 
     def analyze(self, laparams):
         LTTextBox.analyze(self, laparams)
-        self._objs = csort(self._objs, key=lambda obj: -obj.y1)
+        #self._objs = csort(self._objs, key=lambda obj: -obj.y1)
+        self.sort_components(self._objs, laparams, False)
         return
 
     def get_writing_mode(self):
@@ -450,7 +490,8 @@ class LTTextBoxVertical(LTTextBox):
 
     def analyze(self, laparams):
         LTTextBox.analyze(self, laparams)
-        self._objs = csort(self._objs, key=lambda obj: -obj.x1)
+        #self._objs = csort(self._objs, key=lambda obj: -obj.x1)
+        self.sort_components(self._objs, laparams, True)
         return
 
     def get_writing_mode(self):
@@ -504,6 +545,13 @@ class LTLayoutContainer(LTContainer):
         line = None
         for obj1 in objs:
             if obj0 is not None:
+                duplicated = (obj0.is_compatible(obj1) and
+                            obj0.get_text() == obj1.get_text() and
+                            (obj0.voverlap(obj1) > max(obj0.height, obj1.height) * laparams.char_overlap) and
+                            (obj0.hoverlap(obj1) > max(obj0.width, obj1.width) * laparams.char_overlap))
+                if duplicated:
+                    #print("Duplicated:", obj0, obj1)
+                    continue
                 # halign: obj0 and obj1 is horizontally aligned.
                 #
                 #   +------+ - - -
@@ -598,6 +646,7 @@ class LTLayoutContainer(LTContainer):
                 continue
             done.add(box)
             if not box.is_empty():
+                box.analyze(laparams) #sort internal objs
                 yield box
         return
 
@@ -669,7 +718,22 @@ class LTLayoutContainer(LTContainer):
         assert len(plane) == 1, str(len(plane))
         return list(plane)
 
+    def group_textborder(self, laparams, boxes, others):
+        assert boxes, str((laparams, boxes))
+        borders = set()
+        for obj in others:
+            plane = Plane(obj.bbox)
+            plane.extend(boxes)
+            result = set(plane.find_in(obj.bbox))
+            if len(result):
+                #print("Search %s rect:" % obj)
+                #print(result)
+                borders.add(obj)
+
+        return list(borders)
+
     def analyze(self, laparams):
+
         # textobjs is a list of LTChar objects, i.e.
         # it has all the individual characters in the page.
         (textobjs, otherobjs) = fsplit(lambda obj: isinstance(obj, LTChar), self)
@@ -677,26 +741,33 @@ class LTLayoutContainer(LTContainer):
             obj.analyze(laparams)
         if not textobjs:
             return
+        #textobjs = sorted(textobjs, key=lambda obj: (obj.y0, obj.x0))
+        self.sort_components(textobjs, laparams)
         textlines = list(self.group_objects(laparams, textobjs))
         (empties, textlines) = fsplit(lambda obj: obj.is_empty(), textlines)
         for obj in empties:
             obj.analyze(laparams)
         textboxes = list(self.group_textlines(laparams, textlines))
-        if -1 <= laparams.boxes_flow and laparams.boxes_flow <= +1 and textboxes:
+        #textboxes = sorted(textboxes, key=lambda obj: (obj.y0, obj.x0))
+        self.sort_components(textboxes, laparams)
+        if -1 <= laparams.boxes_flow and laparams.boxes_flow <= +1 and len(textboxes):
             self.groups = self.group_textboxes(laparams, textboxes)
             assigner = IndexAssigner()
             for group in self.groups:
                 group.analyze(laparams)
                 assigner.run(group)
             textboxes.sort(key=lambda box: box.index)
-        else:
-            def getkey(box):
-                if isinstance(box, LTTextBoxVertical):
-                    return (0, -box.x1, box.y0)
-                else:
-                    return (1, box.y0, box.x0)
-            textboxes.sort(key=getkey)
+        # else:
+            # def getkey(box):
+            #     if isinstance(box, LTTextBoxVertical):
+            #         return (0, -box.x1, box.y0)
+            #     else:
+            #         return (1, box.y0, box.x0)
+            # textboxes.sort(key=getkey)
+            # sort_components(textboxes, laparams)
+        otherobjs = self.group_textborder(laparams, textboxes, otherobjs)
         self._objs = textboxes + otherobjs + empties
+        #sort_components(self._objs, laparams)
         return
 
 

@@ -276,6 +276,7 @@ def decode_text(s):
 def enc(x, codec='ascii'):
     """Encodes a string for SGML/XML/HTML"""
     if isinstance(x, bytes):
+        print('Skip bytes: "%s"' % x)
         return ''
     x = x.replace('&', '&amp;').replace('>', '&gt;').replace('<', '&lt;').replace('"', '&quot;')
     if codec:
@@ -379,4 +380,20 @@ class Plane(object):
                     obj.y1 <= y0 or y1 <= obj.y0):
                     continue
                 yield obj
+        return
+
+    # find(): finds objects that are in a certain area.
+    def find_in(self, bbox):
+        (x0, y0, x1, y1) = bbox
+        done = set()
+        for k in self._getrange(bbox):
+            if k not in self._grid:
+                continue
+            for obj in self._grid[k]:
+                if obj in done:
+                    continue
+                done.add(obj)
+                if (x0 < obj.x0 and x1 > obj.x1 and
+                    y0 < obj.y0 and y1 > obj.y1):
+                    yield obj
         return
