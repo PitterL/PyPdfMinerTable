@@ -40,6 +40,9 @@ class LAParams(object):
                  line_margin=0.4,
                  word_margin=0.1,
                  boxes_flow=2,
+                 curver_line_ratio=0.05,
+                 table_border_margin=(0.1, 0.15),
+                 page_header_footer=(0.075, 0.09),
                  detect_vertical=False,
                  all_texts=False):
         self.char_overlap = char_overlap
@@ -48,6 +51,9 @@ class LAParams(object):
         self.line_margin = line_margin
         self.word_margin = word_margin
         self.boxes_flow = boxes_flow
+        self.curver_line_ratio = curver_line_ratio
+        self.table_border_margin = table_border_margin
+        self.page_header_footer = page_header_footer
         self.detect_vertical = detect_vertical
         self.all_texts = all_texts
         return
@@ -88,8 +94,8 @@ class LTComponent(LTItem):
         return
 
     def __repr__(self):
-        return ('<%s %s>' %
-                (self.__class__.__name__, bbox2str(self.bbox)))
+        return ('<%s %s (%f %f)>' %
+                (self.__class__.__name__, bbox2str(self.bbox), self.width, self.height))
 
     # Disable comparison.
     def __lt__(self, _):
@@ -298,6 +304,9 @@ class LTContainer(LTComponent):
     def __iter__(self):
         return iter(self._objs)
 
+    def __getitem__(self, key):
+        return self._objs[key]
+
     def __len__(self):
         return len(self._objs)
 
@@ -310,6 +319,9 @@ class LTContainer(LTComponent):
             self.add(obj)
         return
 
+    def clear(self):
+        del self._objs[:]
+
     def sort_components(self, objs, laparams, is_vertical=None):
         from functools import partial, cmp_to_key
         def cmp_pos_func(obj, other, line_margin, is_vertical):
@@ -318,7 +330,7 @@ class LTContainer(LTComponent):
                 fnb = lambda t: t.y0
                 fm = lambda t: t.width * line_margin
             else:
-                fna = lambda t: (t.y0 + obj.y1) / 2 # first key: middle of y pos
+                fna = lambda t: t.y1 #(t.y0 + obj.y1) / 2 # first key: middle of y pos
                 fnb = lambda t: t.x0    # second key: x pos
                 fm = lambda t: t.height * line_margin   # margin for compared with first key
 
@@ -346,6 +358,20 @@ class LTContainer(LTComponent):
 
         #print("Sort components: {} {}".format(obj_class.__name__, len(objs)))
         objs.sort(key = key_func)
+
+    def sort_curves(self, objs, laparams):
+        if not len(objs):
+            return
+
+        obj_class = type(objs[0])
+        if not issubclass(obj_class, LTCurve):
+            return
+
+        (h_curves, v_curves) = fsplit(lambda obj: obj.width * laparams.curver_line_ratio > obj.height, objs)
+        h_curves.sort(key = lambda c: (c.y0, c.x0))
+        v_curves.sort(key=lambda c: (c.x0, c.y0))
+
+        return h_curves + v_curves
 
     def analyze(self, laparams):
         for obj in self._objs:
@@ -420,15 +446,30 @@ class LTTextLineHorizontal(LTTextLine):
         LTTextLine.add(self, obj)
         return
 
-    def find_neighbors(self, plane, ratio):
+    def find_neighbors(self, plane, ratio, align='l'):
         d = ratio*self.height
-        objs = plane.find((self.x0, self.y0-d, self.x1, self.y1+d))
-        return [obj for obj in objs
-                if (isinstance(obj, LTTextLineHorizontal) and
-                    abs(obj.height-self.height) < d and
-                    (abs(obj.x0-self.x0) < d or
-                     abs(obj.x1-self.x1) < d))]
+        #objs = plane.find((self.x0, self.y0-d, self.x1, self.y1+d))
+        objs = plane.find_in((self.x0 - d, self.y0 - d, self.x1 + d, self.y0))
+        # return [obj for obj in objs
+        #         if (isinstance(obj, LTTextLineHorizontal) and
+        #             abs(obj.height-self.height) < d and
+        #             (abs(obj.x0-self.x0) < d or
+        #              abs(obj.x1-self.x1) < d))]
 
+        out = [self]
+        for obj in objs:
+            if isinstance(obj, LTTextLineHorizontal) and \
+                            abs(obj.height-self.height) < d and \
+                            obj.width < self.width + d:
+                if 'l' in align:
+                    if abs(obj.x0-self.x0) < d:
+                        out.append(obj)
+                elif 'r' in align:
+                    if abs(obj.x1-self.x1) < d:
+                        out.append(obj)
+                else:
+                    pass
+        return out
 
 class LTTextLineVertical(LTTextLine):
 
@@ -720,19 +761,38 @@ class LTLayoutContainer(LTContainer):
 
     def group_textborder(self, laparams, boxes, others):
         assert boxes, str((laparams, boxes))
-        borders = set()
+        borders = []
         for obj in others:
-            plane = Plane(obj.bbox)
-            plane.extend(boxes)
-            result = set(plane.find_in(obj.bbox))
-            if len(result):
-                #print("Search %s rect:" % obj)
-                #print(result)
-                borders.add(obj)
+            if isinstance(obj, LTCurve):
+                if obj.width * laparams.curver_line_ratio > obj.height:
+                    # obj.y0 = obj.y1 = (obj.y0 + obj.y1) / 2
+                    # obj.height = 0
+                    borders.append(obj)
+                elif obj.height * laparams.curver_line_ratio > obj.width:
+                    # obj.x0 = obj.x1 = (obj.x0 + obj.x1) / 2
+                    # obj.width = 0
+                    borders.append(obj)
+            # elif isinstance(obj, LTRect):
+            #     x0, y0, x1, y1 = obj.bbox
+            #     w = obj.width * laparams.char_margin
+            #     h = obj.height * laparams.char_margin
+            #     plane = Plane(self.bbox)
+            #     plane.extend(boxes)
+            #     result = set(plane.find_in((x0 - w, y0 - h, x1 + w, y1 + h)))
+            #     if not len(result):
+            #         #print("Search %s rect:" % obj)
+            #         #print(result)
+            #         borders.add(obj)
+            else:
+                pass
 
-        return list(borders)
+        others_objs = self.sort_curves(borders, laparams)
+        return others_objs
 
     def analyze(self, laparams):
+        if not isinstance(self, LTPage):
+            self.clear()
+            return
 
         # textobjs is a list of LTChar objects, i.e.
         # it has all the individual characters in the page.
@@ -750,7 +810,7 @@ class LTLayoutContainer(LTContainer):
         textboxes = list(self.group_textlines(laparams, textlines))
         #textboxes = sorted(textboxes, key=lambda obj: (obj.y0, obj.x0))
         self.sort_components(textboxes, laparams)
-        if -1 <= laparams.boxes_flow and laparams.boxes_flow <= +1 and len(textboxes):
+        if -1 <= laparams.boxes_flow and laparams.boxes_flow <= + 1 and len(textboxes):
             self.groups = self.group_textboxes(laparams, textboxes)
             assigner = IndexAssigner()
             for group in self.groups:
@@ -766,8 +826,8 @@ class LTLayoutContainer(LTContainer):
             # textboxes.sort(key=getkey)
             # sort_components(textboxes, laparams)
         otherobjs = self.group_textborder(laparams, textboxes, otherobjs)
-        self._objs = textboxes + otherobjs + empties
-        #sort_components(self._objs, laparams)
+        self._objs = textboxes + otherobjs# + empties
+
         return
 
 

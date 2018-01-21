@@ -168,7 +168,7 @@ def fsplit(pred, objs):
 # drange
 def drange(v0, v1, d):
     """Returns a discrete range."""
-    assert v0 < v1, str((v0, v1, d))
+    assert v0 <= v1, str((v0, v1, d))
     return range(int(v0)//d, int(v1+d)//d)
 
 
@@ -286,8 +286,8 @@ def enc(x, codec='ascii'):
 
 def bbox2str(bbox):
     (x0, y0, x1, y1) = bbox
-    return '%.3f,%.3f,%.3f,%.3f' % (x0, y0, x1, y1)
-
+    #return '%.3f,%.3f,%.3f,%.3f' % (x0, y0, x1, y1)
+    return '%.1f, %.1f, %.1f, %.1f' % (x0, y0, x1, y1)
 
 def matrix2str(m):
     (a, b, c, d, e, f) = m
@@ -393,7 +393,7 @@ class Plane(object):
                 if obj in done:
                     continue
                 done.add(obj)
-                if (x0 < obj.x0 and x1 > obj.x1 and
-                    y0 < obj.y0 and y1 > obj.y1):
+                if (x0 <= obj.x0 and x1 >= obj.x1 and
+                    y0 <= obj.y0 and y1 >= obj.y1):
                     yield obj
         return

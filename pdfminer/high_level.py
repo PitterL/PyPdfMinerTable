@@ -12,7 +12,7 @@ from .pdfparser import PDFParser
 from .pdfinterp import PDFResourceManager, PDFPageInterpreter
 from .pdfdevice import PDFDevice, TagExtractor
 from .pdfpage import PDFPage
-from .converter import XMLConverter, HTMLConverter, TextConverter
+from .converter import XMLConverter, HTMLConverter, TextConverter, MxtProtocolConverter
 from .cmapdb import CMapDB
 from .image import ImageWriter
 
@@ -20,7 +20,7 @@ from .image import ImageWriter
 def extract_text_to_fp(inf, outfp,
                     _py2_no_more_posargs=None,  # Bloody Python2 needs a shim
                     output_type='text', codec='utf-8', laparams = None,
-                    maxpages=0, page_numbers=None, password="", scale=1.0, rotation=0,
+                    maxpages=0, page_numbers=None, password="", scale=1.0, fontscale=1.0, rotation=0,
                     layoutmode='normal', output_dir=None, strip_control=False,
                     debug=False, disable_caching=False, **other):
     """
@@ -65,11 +65,14 @@ def extract_text_to_fp(inf, outfp,
                               imagewriter=imagewriter,
                               stripcontrol=strip_control)
     elif output_type == 'html':
-        device = HTMLConverter(rsrcmgr, outfp, codec=codec, scale=scale,
+        device = HTMLConverter(rsrcmgr, outfp, codec=codec, scale=scale, fontscale=fontscale,
                                layoutmode=layoutmode, laparams=laparams,
                                imagewriter=imagewriter)
     elif output_type == 'tag':
         device = TagExtractor(rsrcmgr, outfp, codec=codec)
+
+    elif output_type == 'mtp':
+        device = MxtProtocolConverter(rsrcmgr, outfp, codec=codec, laparams=laparams)
 
     interpreter = PDFPageInterpreter(rsrcmgr, device)
     for page in PDFPage.get_pages(inf,

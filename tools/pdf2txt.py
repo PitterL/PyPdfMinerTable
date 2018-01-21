@@ -18,7 +18,7 @@ def extract_text(files=[], outfile='-',
             no_laparams=False, all_texts=None, detect_vertical=None, # LAParams
             word_margin=None, char_margin=None, line_margin=None, boxes_flow=None, # LAParams
             output_type='text', codec='utf-8', strip_control=False,
-            maxpages=0, page_numbers=None, password="", scale=1.0, rotation=0,
+            maxpages=0, page_numbers=None, password="", scale=1.0, fontscale=1.0, rotation=0,
             layoutmode='normal', output_dir=None, debug=False,
             disable_caching=False, **other):
     if _py2_no_more_posargs is not None:
@@ -45,7 +45,8 @@ def extract_text(files=[], outfile='-',
         for override, alttype in (  (".htm", "html"),
                                     (".html", "html"),
                                     (".xml", "xml"),
-                                    (".tag", "tag") ):
+                                    (".tag", "tag"),
+                                    (".mtp", "mtp")):
             if outfile.endswith(override):
                 output_type = alttype
 
@@ -73,9 +74,10 @@ def main(args=None):
     P.add_argument("-m", "--maxpages", type=int, default=0, help = "Maximum pages to parse")
     P.add_argument("-P", "--password", type=str, default="", help = "Decryption password for PDF")
     P.add_argument("-o", "--outfile", type=str, default="-", help="Output file (default/'-' is stdout)")
-    P.add_argument("-t", "--output_type", type=str, default="text", help = "Output type: text|html|xml|tag (default is text)")
+    P.add_argument("-t", "--output_type", type=str, default="text", help = "Output type: text|html|xml|tag|mtp (default is text)")
     P.add_argument("-c", "--codec", type=str, default="utf-8", help = "Text encoding")
     P.add_argument("-s", "--scale", type=float, default=1.0, help = "Scale")
+    P.add_argument("-fs", "--fontscale", type=float, default=1.0, help="Font Scale")
     P.add_argument("-A", "--all-texts", default=None, action="store_true", help="LAParams all texts")
     P.add_argument("-V", "--detect-vertical", default=None, action="store_true", help="LAParams detect vertical")
     P.add_argument("-W", "--word-margin", type=float, default=None, help = "LAParams word margin")
@@ -106,7 +108,8 @@ def main(args=None):
         for override, alttype in (  (".htm",  "html"),
                                     (".html", "html"),
                                     (".xml",  "xml" ),
-                                    (".tag",  "tag" ) ):
+                                    (".tag",  "tag" ),
+                                    (".mtp", "mtp")):
             if A.outfile.endswith(override):
                 A.output_type = alttype
 
@@ -124,4 +127,9 @@ def main(args=None):
     return 0
 
 
-if __name__ == '__main__': sys.exit(main())
+if __name__ == '__main__':
+    #sys.exit(main())
+    #sys.exit(main("-t html -Y normal -fs 0.85 -p 4 -A -o ../samples/test/test_title.html ../samples/test/test.pdf".split()))
+    sys.exit(main("-t mtp -Y normal -p 1,2,3,45,46,47,48  -A -o ../samples/test/test.mtp ../samples/test/test.pdf".split()))
+    #sys.exit(main("-t html -Y normal -fs 0.85 -A -o ../samples/test/test_all.html ../samples/test/test.pdf".split()))
+    #sys.exit(main("-t xml -Y normal -fs 0.85 -p 1,2,3,4,5,17,18,19 -A -o ../samples/test/test_title.xml ../samples/test/test.pdf".split()))

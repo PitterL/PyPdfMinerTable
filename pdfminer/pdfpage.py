@@ -75,6 +75,9 @@ class PDFPage(object):
     def __repr__(self):
         return '<PDFPage: Resources=%r, MediaBox=%r>' % (self.resources, self.mediabox)
 
+    def set_pageno(self, pageno):
+        self.pageno = pageno
+
     INHERITABLE_ATTRS = set(['Resources', 'MediaBox', 'CropBox', 'Rotate'])
 
     @classmethod
@@ -134,6 +137,7 @@ class PDFPage(object):
         for (pageno, page) in enumerate(klass.create_pages(doc)):
             if pagenos and (pageno not in pagenos):
                 continue
+            page.set_pageno(pageno + 1)
             yield page
             if maxpages and maxpages <= pageno+1:
                 break

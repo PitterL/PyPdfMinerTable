@@ -44,7 +44,8 @@ class PDFLayoutAnalyzer(PDFTextDevice):
         (x0, y0) = apply_matrix_pt(ctm, (x0, y0))
         (x1, y1) = apply_matrix_pt(ctm, (x1, y1))
         mediabox = (0, 0, abs(x0-x1), abs(y0-y1))
-        self.cur_item = LTPage(self.pageno, mediabox)
+        #self.cur_item = LTPage(self.pageno, mediabox)
+        self.cur_item = LTPage(page.pageno, mediabox)
         return
 
     def end_page(self, page):
@@ -157,6 +158,7 @@ class PDFConverter(PDFLayoutAnalyzer):
         PDFLayoutAnalyzer.__init__(self, rsrcmgr, pageno=pageno, laparams=laparams)
         self.outfp = outfp
         self.codec = codec
+        self.laparams = laparams
         if hasattr(self.outfp, 'mode'):
             if 'b' in self.outfp.mode:
                 self.outfp_binary = True
@@ -543,4 +545,55 @@ class XMLConverter(PDFConverter):
 
     def close(self):
         self.write_footer()
+        return
+
+
+##  MaxTouchConverter
+##
+from protocol.mxt import MxtProtocol
+class MxtProtocolConverter(PDFConverter):
+    def __init__(self, rsrcmgr, outfp, codec='utf-8', pageno=1, laparams=None,
+                 showpageno=False, imagewriter=None):
+        PDFConverter.__init__(self, rsrcmgr, outfp, codec=codec, pageno=pageno, laparams=laparams)
+        self.showpageno = showpageno
+        self.imagewriter = imagewriter
+        self.protocal = MxtProtocol(self.laparams)
+
+        return
+
+    def write_text(self, text):
+        text = utils.compatible_encode_method(text, self.codec, 'ignore')
+        if six.PY3 and self.outfp_binary:
+            text = text.encode()
+        self.outfp.write(text)
+        return
+
+    def parse_title_page(self, page_item):
+        self.title = page_item[0].get_text()
+        self.version = page_item[1].get_text()
+
+    def parse_index_page(self, page_item):
+        for child in page_item:
+            if isinstance(child, LTTextBox):
+                text = child.get_text()
+
+    def receive_layout(self, ltpage):
+        def render(item):
+            if isinstance(item, LTPage):
+                self.protocal.parse(item)
+
+        render(ltpage)
+        return
+
+    # Some dummy functions to save memory/CPU when all that is wanted
+    # is text.  This stops all the image and drawing output from being
+    # recorded and taking up RAM.
+    def render_image(self, name, stream):
+        if self.imagewriter is None:
+            return
+        PDFConverter.render_image(self, name, stream)
+        return
+
+    def close(self):
+        self.protocal.done()
         return
