@@ -130,6 +130,6 @@ def main(args=None):
 if __name__ == '__main__':
     #sys.exit(main())
     #sys.exit(main("-t html -Y normal -fs 0.85 -p 4 -A -o ../samples/test/test_title.html ../samples/test/test.pdf".split()))
-    sys.exit(main("-t mtp -Y normal -p 1,2,3,45,46,47,48  -A -o ../samples/test/test.mtp ../samples/test/test.pdf".split()))
+    sys.exit(main("-t mtp -Y normal -p 1,2,3,50  -A -o ../samples/test/test.mtp ../samples/test/test.pdf".split()))
     #sys.exit(main("-t html -Y normal -fs 0.85 -A -o ../samples/test/test_all.html ../samples/test/test.pdf".split()))
     #sys.exit(main("-t xml -Y normal -fs 0.85 -p 1,2,3,4,5,17,18,19 -A -o ../samples/test/test_title.xml ../samples/test/test.pdf".split()))
