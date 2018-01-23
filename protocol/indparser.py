@@ -28,42 +28,6 @@ class BoxItem(object):
         return ("<%s '%s' (%s w=%.0f h=%.0f dw(%d)>" %
                 (self.__class__.__name__,
                  self.name, bbox2str(self.bbox), self.width, self.height, self.dig_width))
-    #
-    # def digitalize(self, step, margin):
-    #     step_w, step_h = step
-    #     margin_w, margin_h = margin
-    #
-    #     if step_w:
-    #         dig_w = int((self.width + margin_w * step_w) // step_w)
-    #
-    #     if step_h:
-    #         dig_h = int((self.height + margin_h * step_h) // step_h)
-    #
-    #     self.dig_w = dig_w
-    #     self.dig_h = dig_h
-    #
-    #     return dig_w, dig_h
-
-    # def split(self, dig_w, dig_h):
-    #     if dig_w == 1 and dig_h == 1:   #Not need split
-    #         return self
-    #
-    #     (x0, y0 , x1, y1) = self.bbox
-    #     step_x = self.width / dig_w
-    #     step_y = self.height / dig_h
-    #
-    #     result = []
-    #     for i in range(dig_w):
-    #         x0 = self.x0 + step_x * i
-    #         x1 = x0 + step_x
-    #         for j in range(dig_h):
-    #             y0 = self.y0 + step_y * j
-    #             y1 = y0 + step_y
-    #             elem_new = self.__class__((x0, y0, x1, y1), self.name, self.font_size)
-    #             elem_new.dig_w = self.dig_w
-    #             result.append(elem_new)
-    #
-    #     return result
 
     def set_dig_w(self, dig):
         self.dig_width = dig
@@ -82,21 +46,6 @@ class BoxItem(object):
         self.set_dig_w(dig_w)
 
         return elem_new
-
-    # def v_split(self, splited_h):
-    #     (x0, y0 , x1, y1) = self.bbox
-    #     step_y = self.height / splited_h
-    #
-    #     result = []
-    #     dig_w, dig_h= self.digital
-    #     for j in range(splited_h):
-    #         y1 = self.y1 - step_y * j
-    #         y0 = y1 - step_y
-    #         elem_new = self.__class__((x0, y0, x1, y1), "%s (%d)" % (self.name, j), self.font_size)
-    #         elem_new.set_dig((dig_w, 1))
-    #         result.append(elem_new)
-    #
-    #     return result
 
 class TableElement(object):
     def __init__(self, index, laparams):
@@ -168,10 +117,17 @@ class TableElement(object):
         for elem in self._cache:
             self.digitalize(elem)
 
-        self._cache.sort(key=lambda d: d.x0)
+        self._cache.sort(key=lambda d: d.x0)    #Fixme: no need sort each time, only with splitted line
         self.rows.append(self._cache)
         self._cache = []
         #self._row_curr += 1
+
+    def empty(self):
+        return not self.rows
+
+    def i_row(self, idx):
+        if idx < len(self.rows):
+            return self.rows[idx]
 
     def is_row_end(self, elem_new):
         margin_w, margin_h = self.laparams.table_border_margin
@@ -183,14 +139,6 @@ class TableElement(object):
 
     def is_table_end(self, item_new):
         margin_w, margin_h = self.laparams.table_border_margin
-        # elem_cache_first = self.first_cache_elem()
-        # first_row_elems = self.i_row(0)
-        # if item_new.y1 < elem_cache_first.y0 + margin_h * elem_cache_first.height and \
-        #         item_new.x1 > first_row_elems[0].x0 - margin_w * first_row_elems[0].width and \
-        #         item_new.x0 < first_row_elems[-1].x1 + margin_w * first_row_elems[-1].width:
-        #     return True
-        # else:
-        #     return False
         outline_bbox = self.get_outline()
         if outline_bbox:
             x0, y0, x1, y1 = outline_bbox
@@ -202,13 +150,6 @@ class TableElement(object):
                 return True
 
         return False
-
-    def empty(self):
-        return not self.rows
-
-    def i_row(self, idx):
-        if idx < len(self.rows):
-            return self.rows[idx]
 
     def digitalize(self, elem):
         if self.empty():
@@ -253,7 +194,11 @@ class TableElement(object):
                     break
 
     def put_comment(self, text):
-        self._comments.append(text)
+        self._comments.append(text.strip())
+
+    def i_comment(self, idx):
+        if idx < len(self._comments):
+            return self._comments[idx]
 
     def extend(self, other):
         # Fixme: it's simple copy, not change the bbox relatvie position value
@@ -277,10 +222,9 @@ class TableElement(object):
             self.save_cache()
 
         self.merge_extra()
-        if len(self._comments) > 1:
-            self.name = self._comments[1]
+        if self._comments:
+            self.name = self._comments[0]
 
-    #def parse_table(self, items, item_id, curver_id, word_margin, line_margin):
     def feed_t(self, elem):
         def get_pos_elem(elem_table, x, y=None):
             x_matched, y_matched = (False, False)
@@ -297,9 +241,6 @@ class TableElement(object):
                     return elem
 
         elem_cache_first = self.first_cache_elem()
-        # if not elem_cache_first:
-        #     self.put_cache(elem)
-        #     return
 
         if elem_cache_first is not None:
             if self.is_row_end(elem):
@@ -327,7 +268,7 @@ class TableElement(object):
 
                 #self.put_cache(elem)
 
-        self.handle_extra(elem)
+        self.handle_extra(elem) #Fixme: no need handle extra data each time
         self.put_cache(elem)
 
 class CommentElement(object):
@@ -383,15 +324,6 @@ class CommentElement(object):
                 elif item.x0 < elem.left():
                     pass
                 else:
-                    # result = None
-                    # if elem.children:
-                    #     result = elem.feed(item)
-                    #     if not result:
-                    #         return elem.push_item(item)
-                    # else:
-                    #     return elem.push_item(item)
-                    #
-                    # return result
                     if elem.children:
                         result = elem.feed_c(item)
                         if result is not None:
@@ -495,6 +427,8 @@ class IndentElement(object):
             result = self.pat_tab.match(text)
             if result is not None:
                 self._table = TableElement(result.groups(), self.laparams)
+                if result.end() != len(text):
+                    self._table.put_comment(text[result.end():])
         else:
             if self._table is not None:
                 bbox = self.search_border(item, curves, self.laparams)
@@ -525,37 +459,3 @@ class IndentElement(object):
         result = self.probe_table(item, curves)
         if result is None:
             self.comments.feed_c(item)
-
-    # def feed2(self, item):
-    #     if not self.building_child:
-    #         self.push_item(item)
-    #         return self
-    #
-    #     header = self.building_child[0]
-    #     if item.y1 == header.top():
-    #         self.push_item(item)
-    #     else:
-    #         sibing = None
-    #         for i, elem in enumerate(self.building_child):
-    #             if item.x0 < elem.left():
-    #                 break
-    #             elif item.x0 == elem.left():
-    #                 if i == 0:
-    #                     sibing = None
-    #                 break
-    #             else:
-    #                 sibing = elem
-    #
-    #         if sibing:
-    #             return sibing.feed(item)
-    #         else:
-    #             if item.x0 <= self.left():
-    #                 if self.parent:
-    #                     self.done()
-    #                     return self.parent.feed(item)
-    #                 else:
-    #                     print("Drop un-decided item:", item)
-    #             else:
-    #                 self.push_item(item)
-    #
-    #     return self
