@@ -32,17 +32,40 @@ class BoxItem(object):
     def set_dig_w(self, dig):
         self.dig_width = dig
 
+    def split_name(self, name):
+        pat = re.compile("(\d)\s*[–-]\s*(\d)")
+        result = pat.match(name)
+        if result:
+            st = int(result.group(1))
+            end = int(result.group(2))
+
+            st_new = st + 1
+            if st_new == end:   # name '3-4' -> '3', '4'
+                sp_name = str(st), str(st_new)
+            else:   # name: '3 - 6' -> '3', '4 - 6'
+                sp_name = str(st), "%d - %d" % (st_new, end)
+        else:
+            suffix_c = name[-1]
+            if suffix_c >= '0' and suffix_c <= '9': #name 'DATATYPE 1' -> 'DATATYPE 1', 'DATATYPE 2'
+                new_suffix_c = chr(ord(suffix_c) + 1)
+                sp_name = name, name[:-1] + new_suffix_c
+            else:   #name 'DATATYPE' -> 'DATATYPE 0', 'DATATYPE 1'
+                sp_name = name + ' 0', name + ' 1'
+
+        return sp_name
+
     def v_split(self, height):
         (x0, y0 , x1, y1) = self.bbox
         dig_w = self.dig_width
 
         bbox_new = (x0, y0, x1, y1 - height)
-        elem_new = self.__class__(bbox_new, self.name, self.font_size, self.id + 1)
+        name, name_new = self.split_name(self.name)
+        elem_new = self.__class__(bbox_new, name_new, self.font_size, self.id + 1)
         #elem_new.set_dig_w(dig_w)
 
         #reset value
         bbox = (x0, y1 - height, x1, y1)
-        self.__init__(bbox, self.name, self.font_size)
+        self.__init__(bbox, name, self.font_size)
         self.set_dig_w(dig_w)
 
         return elem_new
@@ -110,6 +133,9 @@ class TableElement(object):
     def first_cache_elem(self):
         return self.cache_data(0)
 
+    def cached_first(self):
+        return len(self._cache) == 1
+
     def put_cache(self, elem):
         self._cache.append(elem)
 
@@ -173,14 +199,14 @@ class TableElement(object):
 
     def handle_extra(self, elem):
         if self._extras:
-            extras_new = []
-            for el in self._extras: #insert extra elem to handle
-                if el.x0 < elem.x0 and \
-                        elem.mid_y > el.y0 and elem.mid_y < el.y1:
-                    self.put_cache(el)
+            extras_dup = self._extras[:]
+            self._extras = []
+            for el in extras_dup: #insert extra elem to handle
+                if (el.mid_x < elem.x0 or el.mid_x > elem.x1) and \
+                        el.mid_y > elem.y0 and el.mid_y < elem.y1:  # outside x but in y range
+                    yield el
                 else:
-                    extras_new.append(el)
-            self._extras = extras_new
+                    self.put_extra(el)
 
     def merge_extra(self):
         for s_elem in self._extras:
@@ -217,6 +243,9 @@ class TableElement(object):
     def done(self):
         for elem in self._raw_cache:
             self.feed_t(elem)
+            if self.cached_first():
+                for el in self.handle_extra(elem):
+                    self.feed_t(el)
 
         if self._cache:
             self.save_cache()
@@ -267,8 +296,6 @@ class TableElement(object):
                     self.put_extra(result)
 
                 #self.put_cache(elem)
-
-        self.handle_extra(elem) #Fixme: no need handle extra data each time
         self.put_cache(elem)
 
 class CommentElement(object):
