@@ -7,7 +7,7 @@ def isclose(a, b, abs_tol=0.0, rel_tol=1e-09):
     return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
 
 class BoxItem(object):
-    def __init__(self, bbox, name, font_size=0, id=0):
+    def __init__(self, bbox, name, font_size=0, id=None):
         (x0, y0, x1, y1) = bbox
         self.bbox = bbox
         self.name = name
@@ -32,43 +32,122 @@ class BoxItem(object):
     def set_dig_w(self, dig):
         self.dig_width = dig
 
-    def split_name(self, name):
+    # def split_name(self, name):
+    #     pat = re.compile("(\d)\s*[–-]\s*(\d)")
+    #     result = pat.match(name)
+    #     if result:
+    #         st = int(result.group(1))
+    #         end = int(result.group(2))
+    #
+    #         st_new = st + 1
+    #         if st_new == end:   # name '3-4' -> '3', '4'
+    #             sp_name = str(st), str(st_new)
+    #         else:   # name: '3 - 6' -> '3', '4 - 6'
+    #             sp_name = str(st), "%d - %d" % (st_new, end)
+    #     else:
+    #         suffix_c = name[-1]
+    #         if suffix_c >= '0' and suffix_c <= '9': #name 'DATATYPE 1' -> 'DATATYPE 1', 'DATATYPE 2'
+    #             new_suffix_c = chr(ord(suffix_c) + 1)
+    #             sp_name = name, name[:-1] + new_suffix_c
+    #         else:   #name 'DATATYPE' -> 'DATATYPE 0', 'DATATYPE 1'
+    #             sp_name = name + ' 0', name + ' 1'
+    #
+    #     return sp_name
+
+    def sequence_name(self):
+        seq = self.id
+        if seq is None:
+            return
+
         pat = re.compile("(\d)\s*[–-]\s*(\d)")
-        result = pat.match(name)
+        result = pat.match(self.name)
         if result:
             st = int(result.group(1))
             end = int(result.group(2))
 
-            st_new = st + 1
-            if st_new == end:   # name '3-4' -> '3', '4'
-                sp_name = str(st), str(st_new)
-            else:   # name: '3 - 6' -> '3', '4 - 6'
-                sp_name = str(st), "%d - %d" % (st_new, end)
+            # st_new = st + 1
+            # if st_new == end:   # name '3-4' -> '3', '4'
+            #     sp_name = str(st), str(st_new)
+            # else:   # name: '3 - 6' -> '3', '4 - 6'
+            #     sp_name = str(st), "%d - %d" % (st_new, end)
+            assert st + seq <= end
+            sp_name = str(st + seq)
         else:
-            suffix_c = name[-1]
-            if suffix_c >= '0' and suffix_c <= '9': #name 'DATATYPE 1' -> 'DATATYPE 1', 'DATATYPE 2'
-                new_suffix_c = chr(ord(suffix_c) + 1)
-                sp_name = name, name[:-1] + new_suffix_c
-            else:   #name 'DATATYPE' -> 'DATATYPE 0', 'DATATYPE 1'
-                sp_name = name + ' 0', name + ' 1'
+            # suffix_c = name[-1]
+            # if suffix_c >= '0' and suffix_c <= '9': #name 'DATATYPE 1' -> 'DATATYPE 1', 'DATATYPE 2'
+            #     new_suffix_c = chr(ord(suffix_c) + 1)
+            #     sp_name = name, name[:-1] + new_suffix_c
+            # else:   #name 'DATATYPE' -> 'DATATYPE 0', 'DATATYPE 1'
+            #     sp_name = name + ' 0', name + ' 1'
+            sp_name = self.name + " " + str(seq)
 
-        return sp_name
+        self.name = sp_name
 
-    def v_split(self, height):
+    # def v_split_old(self, height):
+    #     (x0, y0 , x1, y1) = self.bbox
+    #     dig_w = self.dig_width
+    #
+    #     bbox_new = (x0, y0, x1, y1 - height)
+    #     name, name_new = self.split_name(self.name)
+    #     elem_new = self.__class__(bbox_new, name_new, self.font_size, self.id + 1)
+    #     #elem_new.set_dig_w(dig_w)
+    #
+    #     #reset value
+    #     bbox = (x0, y1 - height, x1, y1)
+    #     self.__init__(bbox, name, self.font_size)
+    #     self.set_dig_w(dig_w)
+    #
+    #     return elem_new
+
+    def v_split(self, elem, margin_h):
         (x0, y0 , x1, y1) = self.bbox
-        dig_w = self.dig_width
+        #dig_w = self.dig_width
+        extra = []
+        id = self.id
+        if id is None:
+            id = 0 # Fixme: there will be id overlap is middle element should be split again.
+        seq = 0
 
-        bbox_new = (x0, y0, x1, y1 - height)
-        name, name_new = self.split_name(self.name)
-        elem_new = self.__class__(bbox_new, name_new, self.font_size, self.id + 1)
-        #elem_new.set_dig_w(dig_w)
+        """
+        self is higher than target
+                    -----           (x1, y1)
+                    |   |   
+                    |   |     -----
+                    |   |     |   |
+           (x0, y0) -----     -----
+        
+                     self      elem
+        """
+        abs_tol = margin_h * elem.height
+        if not isclose(elem.y1, y1, abs_tol) and elem.y1 < y1:
+            bbox_new = (x0, elem.y1, x1, y1)
+            elem_new = self.__class__(bbox_new, self.name, self.font_size, id)
+            seq += 1
+            extra.append(elem_new)
+
+
+        """
+        self is lower than target
+                    -----     -----  (x1, y1)
+                    |   |     |   |
+                    |   |     -----
+                    |   |
+            (x0,y0) -----  
+                     self      elem
+        """
+        if not isclose(elem.y0, y0, abs_tol) and elem.y0 > y0:
+            bbox_new = (x0, y0, x1, elem.y0)
+            elem_new = self.__class__(bbox_new, self.name, self.font_size, id + seq + 1)
+            extra.append(elem_new)
 
         #reset value
-        bbox = (x0, y1 - height, x1, y1)
-        self.__init__(bbox, name, self.font_size)
-        self.set_dig_w(dig_w)
+        bbox = (x0, elem.y0, x1, elem.y1)
+        self.__init__(bbox, self.name, self.font_size, id + seq)
+        #self.set_dig_w(dig_w)
 
-        return elem_new
+        print(self.__class__.__name__, 'v_split:', 'self', self, 'extra', extra)
+        assert extra
+        return extra
 
 class TableElement(object):
     def __init__(self, index, laparams):
@@ -140,8 +219,8 @@ class TableElement(object):
         self._cache.append(elem)
 
     def save_cache(self):
-        for elem in self._cache:
-            self.digitalize(elem)
+        # for elem in self._cache:
+        #     self.digitalize(elem)
 
         self._cache.sort(key=lambda d: d.x0)    #Fixme: no need sort each time, only with splitted line
         self.rows.append(self._cache)
@@ -177,47 +256,123 @@ class TableElement(object):
 
         return False
 
-    def digitalize(self, elem):
-        if self.empty():
-            dig_w = 1
+    def split_elem(self, cache, elem, margin_h):
+        elem_cache_first = cache[0]
+        if isclose(elem_cache_first.height, elem.height, 0, margin_h):
+            return (elem,None)
+        elif elem_cache_first.height < elem.height:
+            elems_new = elem.v_split(elem_cache_first, margin_h)
+            return (elem, elems_new)
         else:
-            dig_w = 0
-            for el in self.i_row(0):
-                if el.mid_x > elem.x0:
-                    if el.mid_x < elem.x1:
-                        dig_w += 1
-                    else:
-                        break
+            result = []
+            for el in cache:
+                elems_new = el.v_split(elem, margin_h)
+                result.extend(elems_new)
+            return (elem, result if result else None)
 
-        elem.set_dig_w(dig_w)
+    def put_elem(self, row_elems, elem_new):
+        assert elem_new
+        row_elems.append(elem_new)
+        row_elems.sort(key=lambda d: d.x0)
+        #print(self.__class__.__name__, "put_elem", "sorted", row_elems)
+
+    def dump_extras(self):
+        #print(self.__class__.__name__, "dump_extras", self._extras)
+        extra_dup = self._extras
+        self._extras = []
+        return extra_dup
+
+    def extras_size(self):
+        return len(self._extras)
+
+    def extras_range(self):
+        if self.extras_size():
+            x0, y0, x1, y1 = self._extras[0].bbox
+            for el in self._extras[1:]:
+                x0 = min(x0, el.x0)
+                y0 = min(y0, el.y0)
+                x1 = min(x1, el.x1)
+                y1 = min(y1, el.y1)
+
+            return (x0, y0, x1, y1)
 
     def put_extra(self, data):
-        if isinstance(data, (list, tuple)):
-            self._extras.extend(data)
-        else:
-            self._extras.append(data)
+        #print(self.__class__.__name__, "put_extra:", type(data), data)
+        if data:
+            if isinstance(data, (list, tuple)):
+                self._extras.extend(data)
+            else:
+                self._extras.append(data)
+        #print(self.__class__.__name__, "put_extra extra:", self._extras)
 
-    def handle_extra(self, elem):
-        if self._extras:
-            extras_dup = self._extras[:]
-            self._extras = []
-            for el in extras_dup: #insert extra elem to handle
-                if (el.mid_x < elem.x0 or el.mid_x > elem.x1) and \
-                        el.mid_y > elem.y0 and el.mid_y < elem.y1:  # outside x but in y range
-                    yield el
-                else:
-                    self.put_extra(el)
+    # def handle_extra(self, elem):
+    #     if self._extras:
+    #         extras_dup = self._extras
+    #         self._extras = []
+    #         for el in extras_dup: #insert extra elem to handle
+    #             if el.mid_x < elem.x0 or el.mid_x > elem.x1:    #outside at x axis
+    #                 if (el.mid_y > elem.y0 and el.mid_y < elem.y1) or   \
+    #                     (elem.mid_y > el.y0 and elem.mid_y < el.y1):  #but in y range
+    #                     yield el
+    #             else:
+    #                 self.put_extra(el)
+
+    def handle_extra(self, row_elems):
+        #extras_dup should the copy of self._extras
+        extras_dup = self.dump_extras()
+
+        elem = row_elems[0]
+        for el in extras_dup: #insert extra elem to handle
+            if el.mid_x < elem.x0 or el.mid_x > elem.x1:    #outside at x axis
+                if (el.mid_y > elem.y0 and el.mid_y < elem.y1) or   \
+                    (elem.mid_y > el.y0 and elem.mid_y < el.y1):  #but in y range
+                    _, margin_h = self.laparams.table_border_margin
+                    elem_new, extra = self.split_elem(row_elems, el, margin_h)
+                    self.put_elem(row_elems, elem_new)
+                    if extra:
+                        self.put_extra(extra)
+                    continue
+            self.put_extra(el)
 
     def merge_extra(self):
-        for s_elem in self._extras:
+        _, margin_h = self.laparams.table_border_margin
+        count = len(self.rows)
+        for i in range(count):
             for row_elems in self.rows:
-                # if s_elem.y0 > row_data[0].y0 - margin_h.row_data[0].height and \
-                #                 s_elem.y1 < row_data[0].y1 + margin_h.row_data[0].height:
-                row_elem_first = row_elems[0]
-                if s_elem.mid_y > row_elem_first.y0 and s_elem.mid_y < row_elem_first.y1:
-                    row_elems.append(s_elem)
-                    sorted(row_elems, key=lambda d: d.x0)
+                elem = self.handle_extra(row_elems)
+                if not self.extras_size():
                     break
+
+            bbox = self.extras_range()
+            if not bbox:
+                break
+
+            elem_high = self.rows[0][0]
+            elem_low = self.rows[-1][-1]
+            if bbox[1] > elem_high.mid_y or \
+                            bbox[3] < elem_low.mid_y: #above the elem, or below the elem
+                print("drop extras data:", self._extras)
+                break
+
+        if i + 1 == count:
+            print(self.__class__.__name__, "merge_extra", "overflow!")
+
+    def digitalize(self):
+        if self.empty():
+            return
+        else:
+            ref_row = self.i_row(0)
+            for row in self.rows:
+                for elem in row:
+                    dig_w = 0
+                    for el in ref_row:
+                        if el.mid_x > elem.x0:
+                            if el.mid_x < elem.x1:
+                                dig_w += 1
+                            else:
+                                break
+                    elem.set_dig_w(dig_w)
+
 
     def put_comment(self, text):
         self._comments.append(text.strip())
@@ -240,20 +395,6 @@ class TableElement(object):
 
         self.rows.extend(other[i:])
 
-    def done(self):
-        for elem in self._raw_cache:
-            self.feed_t(elem)
-            if self.cached_first():
-                for el in self.handle_extra(elem):
-                    self.feed_t(el)
-
-        if self._cache:
-            self.save_cache()
-
-        self.merge_extra()
-        if self._comments:
-            self.name = self._comments[0]
-
     def feed_t(self, elem):
         def get_pos_elem(elem_table, x, y=None):
             x_matched, y_matched = (False, False)
@@ -274,29 +415,41 @@ class TableElement(object):
         if elem_cache_first is not None:
             if self.is_row_end(elem):
                 self.save_cache()
-                #self.put_cache(elem)
             else:
-                # if self.empty():  #assume first row is stand element width
-                #     self.put_cache(elem)
+                # margin_w, margin_h = self.laparams.table_border_margin
+                # if isclose(elem_cache_first.height, elem.height, 0, margin_h):
+                #     pass
+                # elif elem_cache_first.height < elem.height:
+                #     elem_new = elem.v_split(elem_cache_first.height)
+                #     self.put_extra(elem_new)
                 # else:
+                #     result = []
+                #     for el in self._cache:
+                #         elem_new = el.v_split(elem.height)
+                #         result.append(elem_new)
+                #     self.put_extra(result)
+                _, margin_h = self.laparams.table_border_margin
+                elem, extra = self.split_elem(self._cache, elem, margin_h)
+                if extra:
+                    self.put_extra(extra)
 
-                margin_w, margin_h = self.laparams.table_border_margin
-                #self.digitalize(elem)
-
-                if isclose(elem_cache_first.height, elem.height, 0, margin_h):
-                    pass
-                elif elem_cache_first.height < elem.height:
-                    elem_new = elem.v_split(elem_cache_first.height)
-                    self.put_extra(elem_new)
-                else:
-                    result = []
-                    for el in self._cache:
-                        elem_new = el.v_split(elem.height)
-                        result.append(elem_new)
-                    self.put_extra(result)
-
-                #self.put_cache(elem)
         self.put_cache(elem)
+
+    def done(self):
+        for elem in self._raw_cache:
+            self.feed_t(elem)
+            if self.cached_first():
+                self.handle_extra(self._cache)
+                # for el in self.handle_extra(elem):
+                #      self.feed_t(el)
+
+        if self._cache:
+            self.save_cache()
+
+        self.merge_extra()
+        self.digitalize()
+        if self._comments:
+            self.name = self._comments[0]
 
 class CommentElement(object):
     def __init__(self, item, parent=None):
@@ -395,12 +548,16 @@ class IndentElement(object):
 
         margin_w, margin_h = laparams.table_border_margin
         top, bottom, left, right = (None, None, None, None)
+        abs_tol, rel_tol = laparams.curver_line_tol
+        mid_x = (item.x0 + item.x1) // 2
+        mid_y = (item.y0 + item.y1) // 2
+        margin_y = item.height * margin_h
+        margin_x = item.width * margin_w
         for curve in curves:
-            if curve.width * laparams.curver_line_ratio > curve.height:
-                mid_x = (item.x0 + item.x1) // 2
+            if curve.width * rel_tol > curve.height:
                 if mid_x >= curve.x0 and mid_x <= curve.x1:
-                    margin = item.height * margin_h
-                    if item.y1 <= curve.y1 + margin:
+                    #if item.y1 <= curve.y1 + margin_y:
+                    if mid_y < curve.y1:
                         #     ------
                         #       ab
                         # print("Top:",curve, item)
@@ -408,7 +565,8 @@ class IndentElement(object):
                             top = curve
                         else:
                             top = get_closer(item, top, curve, 'y1')
-                    elif item.y0 >= curve.y0 - margin:
+                    #elif item.y0 >= curve.y0 - margin_y:
+                    elif mid_y > curve.y0:
                         #       ab
                         #     ------
                         # print("Bottom:", curve, item)
@@ -417,12 +575,11 @@ class IndentElement(object):
                         else:
                             bottom = get_closer(item, bottom, curve, 'y0')
                     else:
-                        print("Crossed curve in y direction:", curve, item, margin)
-            elif curve.height * laparams.curver_line_ratio > curve.width:
-                mid_y = (item.y0 + item.y1) // 2
+                        print("Crossed curve in y direction:", curve, item, margin_y)
+            elif curve.height * rel_tol > curve.width:
                 if mid_y >= curve.y0 and mid_y <= curve.y1:
-                    margin = item.width * margin_w
-                    if item.x0 > curve.x0 - margin:
+                    if item.x0 > curve.x0 - margin_x:
+                    #if mid_x > curve.x0:
                         #   |
                         #   |   ab
                         #   |
@@ -431,7 +588,8 @@ class IndentElement(object):
                             left = curve
                         else:
                             left = get_closer(item, left, curve, 'x1')
-                    elif item.x1 < curve.x1 + margin:
+                    #elif item.x1 < curve.x1 + margin_x:
+                    elif mid_x < curve.x1:
                         #       |
                         #   ab  |
                         #       |
@@ -441,12 +599,35 @@ class IndentElement(object):
                         else:
                             right = get_closer(item, right, curve, 'x0')
                     else:
-                        print("Crossed curve in x direction:", curve, item, margin)
+                        print("Crossed curve in x direction:", curve, item, margin_x)
             else:
                 print("Not curve line, discard:", curve)
 
+        """
+                            (x1, y1)
+                -------------
+                |    T      |
+                -------------
+            -----       -----      
+            |   |       |   |
+            |   |       |   |
+            | L |       | R |
+            |   |       |   |
+            |   |       |   |
+            -----       -----
+                ---------
+                |   B   |
+                ---------
+            (x0, y0)
+            select overlapped center zone
+        """
         if all((top, bottom, left, right)):
-            return (left.x0, bottom.y0, right.x1, top.y1)
+            x0 = max(top.x0 - margin_x, left.x0, bottom.x0 - margin_x)
+            y0 = max(left.y0 - margin_y, bottom.y0, right.y0 - margin_y)
+            x1 = min(top.x1 + margin_x, right.x1, bottom.x1 + margin_x)
+            y1 = min(left.y1 + margin_y, top.y1, right.y1 + margin_y)
+            #return (left.x0, bottom.y0, right.x1, top.y1)
+            return (x0, y0, x1, y1)
 
     def probe_table(self, item, curves):
         text = item.get_text().strip()

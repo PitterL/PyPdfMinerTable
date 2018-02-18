@@ -161,6 +161,7 @@ class MxtProtocol(object):
 
         page_no = items.pageid
         sec_info = self.reg_index.pageno_to_secinfo(page_no)
+        print(self.__class__.__name__, 'parse', page_no, sec_info)
 
         if not sec_info:
             return
@@ -228,7 +229,15 @@ class MxtProtocol(object):
                     v1.name.startswith("Message Data for"):
                     print(k1)
                     print(v1.name)
-                    content = [[(elem.name, elem.dig_width) for elem in row] for row in v1.rows]
+                    content = []
+                    for row in v1.rows:
+                        row_elem = []
+                        for elem in row:
+                            elem.sequence_name()
+                            row_elem.append((elem.name, elem.dig_width))
+                        print(row_elem)
+                        content.append(row_elem)
+                    #content = [[(elem.name, elem.dig_width) for elem in row] for row in v1.rows]
                     print(content)
                     result[v1.name] = content
 

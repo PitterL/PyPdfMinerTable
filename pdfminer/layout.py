@@ -36,11 +36,11 @@ class LAParams(object):
     def __init__(self,
                  char_overlap=0.95,
                  line_overlap=0.4,
-                 char_margin=1.4,
+                 char_margin=0.95,
                  line_margin=0.4,
                  word_margin=0.1,
                  boxes_flow=2,
-                 curver_line_ratio=0.05,
+                 curver_line_tolerance=(5, 0.05),    #abs, rel tolenrance
                  table_border_margin=(0.1, 0.15),
                  page_header_footer=(0.075, 0.09),
                  detect_vertical=False,
@@ -51,7 +51,7 @@ class LAParams(object):
         self.line_margin = line_margin
         self.word_margin = word_margin
         self.boxes_flow = boxes_flow
-        self.curver_line_ratio = curver_line_ratio
+        self.curver_line_tol = curver_line_tolerance
         self.table_border_margin = table_border_margin
         self.page_header_footer = page_header_footer
         self.detect_vertical = detect_vertical
@@ -367,7 +367,8 @@ class LTContainer(LTComponent):
         if not issubclass(obj_class, LTCurve):
             return
 
-        (h_curves, v_curves) = fsplit(lambda obj: obj.width * laparams.curver_line_ratio > obj.height, objs)
+        abs_tol, rel_tol = laparams.curver_line_tol
+        (h_curves, v_curves) = fsplit(lambda obj: obj.width * rel_tol > obj.height, objs)
         h_curves.sort(key = lambda c: (c.y0, c.x0))
         v_curves.sort(key=lambda c: (c.x0, c.y0))
 
@@ -762,13 +763,14 @@ class LTLayoutContainer(LTContainer):
     def group_textborder(self, laparams, boxes, others):
         assert boxes, str((laparams, boxes))
         borders = []
+        abs_tol, rel_tol = laparams.curver_line_tol
         for obj in others:
             if isinstance(obj, LTCurve):
-                if obj.width * laparams.curver_line_ratio > obj.height:
+                if obj.width * rel_tol > obj.height and abs_tol > obj.height:
                     # obj.y0 = obj.y1 = (obj.y0 + obj.y1) / 2
                     # obj.height = 0
                     borders.append(obj)
-                elif obj.height * laparams.curver_line_ratio > obj.width:
+                elif obj.height * rel_tol > obj.width and abs_tol > obj.width:
                     # obj.x0 = obj.x1 = (obj.x0 + obj.x1) / 2
                     # obj.width = 0
                     borders.append(obj)
